@@ -25,16 +25,18 @@
   <script>
     const canvas = document.getElementById('game');
     const context = canvas.getContext('2d');
-    const GAME_STATE = Object.freeze({ PLAYING: 0, GAME_OVER: 1 });
-    let gameState = GAME_STATE.PLAYING;
+    const GAME_STATE = Object.freeze({ MENU: 0, SETTINGS: 1, HELP: 2, PLAYING: 3, GAME_OVER: 4, WIN: 5 });
+    let gameState = GAME_STATE.MENU;
     const keys = {};
     const bullets = [];
     const enemies = [];
     const effects = [];
     let score = 0;
     let wave = 0;
+    let level = 1;
     let damageFlash = 0;
-    const map = [
+    const settings = { difficulty: 'NORMAL', sound: true };
+    const maps = [[
       '111111111111',
       '100000000001',
       '101110111101',
@@ -44,7 +46,18 @@
       '101111101101',
       '100000000001',
       '111111111111'
-    ];
+    ], [
+      '111111111111',
+      '100010000001',
+      '101010111101',
+      '100000100001',
+      '101110111101',
+      '100010000001',
+      '101011101101',
+      '100000000001',
+      '111111111111'
+    ]];
+    let map = maps[0];
     const player = {
       x: 0,
       y: 0,
@@ -55,6 +68,7 @@
       size: 28
     };
     const restartButton = { x: 0, y: 0, width: 190, height: 44 };
+    const menuButtons = { play: 0, settings: 0, help: 0, back: 0 };
     let previousTime = 0;
 
     function resizeCanvas() {
@@ -140,11 +154,15 @@
         x: point.x,
         y: point.y,
         angle: 0,
-        speed: 65 + wave * 8,
-        hp: 1 + Math.ceil(wave / 2),
-        cooldown: .7 + Math.random() * .8,
+        speed: (65 + wave * 8) * difficultyScale(),
+        hp: Math.max(1, Math.ceil((1 + wave / 2) * difficultyScale())),
+        cooldown: 1.7 - difficultyScale() * .35 + Math.random() * .8,
         size: 24
       });
+    }
+
+    function difficultyScale() {
+      return settings.difficulty === 'EASY' ? .8 : settings.difficulty === 'HARD' ? 1.25 : 1;
     }
 
     function startWave() {
@@ -153,14 +171,30 @@
       for (let index = 0; index < count; index++) spawnEnemy();
     }
 
+    function loadLevel(nextLevel) {
+      level = nextLevel;
+      map = maps[level - 1];
+      bullets.length = 0;
+      enemies.length = 0;
+      effects.length = 0;
+      wave = 0;
+      const point = mapPoint(1, 1);
+      player.x = point.x;
+      player.y = point.y;
+      player.angle = -Math.PI / 2;
+      startWave();
+    }
+
     function restartGame() {
       bullets.length = 0;
       enemies.length = 0;
       effects.length = 0;
       score = 0;
+      level = 1;
       wave = 0;
       damageFlash = 0;
       gameState = GAME_STATE.PLAYING;
+      map = maps[0];
       player.hp = 100;
       player.cooldown = 0;
       player.angle = -Math.PI / 2;
@@ -168,6 +202,10 @@
       player.x = point.x;
       player.y = point.y;
       startWave();
+    }
+
+    function startGame() {
+      restartGame();
     }
 
     function update(deltaTime) {
@@ -181,7 +219,7 @@
         }
         if (effect.life <= 0) effects.splice(index, 1);
       }
-      if (gameState === GAME_STATE.GAME_OVER) return;
+      if (gameState !== GAME_STATE.PLAYING) return;
       const forward = (keys.w || keys.ArrowUp ? 1 : 0) - (keys.s || keys.ArrowDown ? 1 : 0);
       const turn = (keys.d || keys.ArrowRight ? 1 : 0) - (keys.a || keys.ArrowLeft ? 1 : 0);
       player.angle += turn * 3 * deltaTime;
@@ -233,7 +271,10 @@
           if (player.hp <= 0) gameState = GAME_STATE.GAME_OVER;
         }
       }
-      if (!enemies.length) startWave();
+      if (!enemies.length) {
+        if (level < maps.length) loadLevel(level + 1);
+        else gameState = GAME_STATE.WIN;
+      }
     }
 
     function shoot() {
@@ -306,37 +347,95 @@
 
     function drawStatus() {
       context.fillStyle = 'rgba(15, 23, 30, .86)';
-      context.fillRect(12, 12, 180, 82);
+      context.fillRect(12, 12, 180, 104);
       context.fillStyle = '#f5f5f5';
       context.font = 'bold 14px sans-serif';
       context.textAlign = 'left';
       context.fillText(`SCORE  ${score}`, 24, 34);
-      context.fillText(`WAVE   ${wave}`, 24, 56);
-      context.fillText(`HP     ${Math.max(0, player.hp)}`, 24, 78);
+      context.fillText(`LEVEL  ${level}`, 24, 56);
+      context.fillText(`WAVE   ${wave}`, 24, 78);
+      context.fillText(`HP     ${Math.max(0, player.hp)}`, 24, 100);
       context.fillStyle = '#263238';
-      context.fillRect(76, 68, 96, 10);
+      context.fillRect(76, 90, 96, 10);
       context.fillStyle = player.hp > 30 ? '#66bb6a' : '#ef5350';
-      context.fillRect(76, 68, 96 * Math.max(0, player.hp) / 100, 10);
+      context.fillRect(76, 90, 96 * Math.max(0, player.hp) / 100, 10);
     }
 
     function drawGameOver() {
-      if (gameState !== GAME_STATE.GAME_OVER) return;
+      if (gameState !== GAME_STATE.GAME_OVER && gameState !== GAME_STATE.WIN) return;
       context.fillStyle = 'rgba(0, 0, 0, .7)';
       context.fillRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = '#ffffff';
       context.textAlign = 'center';
       context.font = 'bold 36px sans-serif';
-      context.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+      context.fillText(gameState === GAME_STATE.WIN ? 'YOU WIN' : 'GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
       restartButton.x = canvas.width / 2 - restartButton.width / 2;
       restartButton.y = canvas.height / 2 + 12;
       context.fillStyle = '#4caf50';
       context.fillRect(restartButton.x, restartButton.y, restartButton.width, restartButton.height);
       context.fillStyle = '#ffffff';
       context.font = 'bold 18px sans-serif';
-      context.fillText('RESTART', canvas.width / 2, restartButton.y + 28);
+      context.fillText(gameState === GAME_STATE.WIN ? 'PLAY AGAIN' : 'RESTART', canvas.width / 2, restartButton.y + 28);
+    }
+
+    function drawButton(label, y, color = '#4caf50') {
+      const width = 210;
+      const height = 44;
+      const x = canvas.width / 2 - width / 2;
+      context.fillStyle = color;
+      context.fillRect(x, y, width, height);
+      context.fillStyle = '#ffffff';
+      context.font = 'bold 16px sans-serif';
+      context.textAlign = 'center';
+      context.fillText(label, canvas.width / 2, y + 28);
+      return { x, y, width, height };
+    }
+
+    function drawMenu() {
+      context.fillStyle = '#18212b';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#8bc34a';
+      context.font = 'bold 42px sans-serif';
+      context.textAlign = 'center';
+      context.fillText('TANK BATTLE', canvas.width / 2, canvas.height / 2 - 130);
+      menuButtons.play = drawButton('PLAY', canvas.height / 2 - 70);
+      menuButtons.settings = drawButton('SETTINGS', canvas.height / 2 - 16, '#607d8b');
+      menuButtons.help = drawButton('HOW TO PLAY', canvas.height / 2 + 38, '#607d8b');
+    }
+
+    function drawSettings() {
+      context.fillStyle = '#18212b';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#ffffff';
+      context.font = 'bold 30px sans-serif';
+      context.textAlign = 'center';
+      context.fillText('SETTINGS', canvas.width / 2, canvas.height / 2 - 120);
+      context.font = '18px sans-serif';
+      context.fillText(`DIFFICULTY: ${settings.difficulty}`, canvas.width / 2, canvas.height / 2 - 62);
+      menuButtons.settings = drawButton('CHANGE DIFFICULTY', canvas.height / 2 - 38, '#607d8b');
+      context.fillText(`SOUND: ${settings.sound ? 'ON' : 'OFF'}`, canvas.width / 2, canvas.height / 2 + 32);
+      menuButtons.play = drawButton('TOGGLE SOUND', canvas.height / 2 + 54, '#607d8b');
+      menuButtons.back = drawButton('BACK', canvas.height / 2 + 108, '#455a64');
+    }
+
+    function drawHelp() {
+      context.fillStyle = '#18212b';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#ffffff';
+      context.textAlign = 'center';
+      context.font = 'bold 30px sans-serif';
+      context.fillText('HOW TO PLAY', canvas.width / 2, canvas.height / 2 - 110);
+      context.font = '17px sans-serif';
+      context.fillText('WASD / ARROWS  MOVE AND TURN', canvas.width / 2, canvas.height / 2 - 48);
+      context.fillText('MOUSE  AIM    CLICK  FIRE', canvas.width / 2, canvas.height / 2 - 14);
+      context.fillText('DESTROY ENEMIES AND SURVIVE', canvas.width / 2, canvas.height / 2 + 20);
+      menuButtons.back = drawButton('BACK', canvas.height / 2 + 64, '#455a64');
     }
 
     function render() {
+      if (gameState === GAME_STATE.MENU) return drawMenu();
+      if (gameState === GAME_STATE.SETTINGS) return drawSettings();
+      if (gameState === GAME_STATE.HELP) return drawHelp();
       context.fillStyle = '#18212b';
       context.fillRect(0, 0, canvas.width, canvas.height);
       drawWalls();
@@ -372,16 +471,26 @@
       player.angle = Math.atan2(event.clientY - bounds.top - player.y, event.clientX - bounds.left - player.x);
     });
     canvas.addEventListener('click', event => {
-      if (gameState === GAME_STATE.GAME_OVER) {
-        const bounds = canvas.getBoundingClientRect();
-        const x = event.clientX - bounds.left;
-        const y = event.clientY - bounds.top;
-        if (x >= restartButton.x && x <= restartButton.x + restartButton.width && y >= restartButton.y && y <= restartButton.y + restartButton.height) restartGame();
+      const bounds = canvas.getBoundingClientRect();
+      const x = event.clientX - bounds.left;
+      const y = event.clientY - bounds.top;
+      const inside = button => x >= button.x && x <= button.x + button.width && y >= button.y && y <= button.y + button.height;
+      if (gameState === GAME_STATE.MENU) {
+        if (inside(menuButtons.play)) startGame();
+        else if (inside(menuButtons.settings)) gameState = GAME_STATE.SETTINGS;
+        else if (inside(menuButtons.help)) gameState = GAME_STATE.HELP;
+      } else if (gameState === GAME_STATE.SETTINGS) {
+        if (inside(menuButtons.settings)) settings.difficulty = settings.difficulty === 'EASY' ? 'NORMAL' : settings.difficulty === 'NORMAL' ? 'HARD' : 'EASY';
+        else if (inside(menuButtons.play)) settings.sound = !settings.sound;
+        else if (inside(menuButtons.back)) gameState = GAME_STATE.MENU;
+      } else if (gameState === GAME_STATE.HELP) {
+        if (inside(menuButtons.back)) gameState = GAME_STATE.MENU;
+      } else if (gameState === GAME_STATE.GAME_OVER || gameState === GAME_STATE.WIN) {
+        if (inside(restartButton)) restartGame();
       } else shoot();
     });
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
-    startWave();
     requestAnimationFrame(gameLoop);
   </script>
 </body>
