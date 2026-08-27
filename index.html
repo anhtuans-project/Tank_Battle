@@ -30,6 +30,7 @@
     const keys = {};
     const mouse = { x: 0, y: 0 };
     const bullets = [];
+    const enemies = [];
     const player = {
       x: 0,
       y: 0,
@@ -48,6 +49,28 @@
       player.y = Math.max(player.size, Math.min(player.y || canvas.height / 2, canvas.height - player.size));
     }
 
+    function createBullet(x, y, angle, owner) {
+      const bulletSpeed = 520;
+      bullets.push({
+        x: x + Math.cos(angle) * 30,
+        y: y + Math.sin(angle) * 30,
+        vx: Math.cos(angle) * bulletSpeed,
+        vy: Math.sin(angle) * bulletSpeed,
+        owner,
+        radius: 5
+      });
+    }
+
+    function spawnEnemy() {
+      let x;
+      let y;
+      do {
+        x = 40 + Math.random() * Math.max(1, canvas.width - 80);
+        y = 40 + Math.random() * Math.max(1, canvas.height - 80);
+      } while (Math.hypot(x - player.x, y - player.y) < 180);
+      enemies.push({ x, y, angle: 0, speed: 65, hp: 2, cooldown: 1 + Math.random(), size: 24 });
+    }
+
     function update(deltaTime) {
       if (gameState === GAME_STATE.GAME_OVER) return;
       const forward = (keys.w || keys.ArrowUp ? 1 : 0) - (keys.s || keys.ArrowDown ? 1 : 0);
@@ -58,6 +81,23 @@
       player.x = Math.max(player.size, Math.min(player.x, canvas.width - player.size));
       player.y = Math.max(player.size, Math.min(player.y, canvas.height - player.size));
       player.cooldown = Math.max(0, player.cooldown - deltaTime);
+      enemies.forEach(enemy => {
+        const dx = player.x - enemy.x;
+        const dy = player.y - enemy.y;
+        const distance = Math.hypot(dx, dy);
+        enemy.angle = Math.atan2(dy, dx);
+        if (distance > 150) {
+          enemy.x += Math.cos(enemy.angle) * enemy.speed * deltaTime;
+          enemy.y += Math.sin(enemy.angle) * enemy.speed * deltaTime;
+        }
+        enemy.x = Math.max(enemy.size, Math.min(enemy.x, canvas.width - enemy.size));
+        enemy.y = Math.max(enemy.size, Math.min(enemy.y, canvas.height - enemy.size));
+        enemy.cooldown -= deltaTime;
+        if (enemy.cooldown <= 0 && distance < 650) {
+          createBullet(enemy.x, enemy.y, enemy.angle, 'enemy');
+          enemy.cooldown = 1.5 + Math.random();
+        }
+      });
       for (let index = bullets.length - 1; index >= 0; index--) {
         const bullet = bullets[index];
         bullet.x += bullet.vx * deltaTime;
@@ -68,15 +108,7 @@
 
     function shoot() {
       if (gameState !== GAME_STATE.PLAYING || player.cooldown > 0) return;
-      const bulletSpeed = 520;
-      bullets.push({
-        x: player.x + Math.cos(player.angle) * 30,
-        y: player.y + Math.sin(player.angle) * 30,
-        vx: Math.cos(player.angle) * bulletSpeed,
-        vy: Math.sin(player.angle) * bulletSpeed,
-        owner: 'player',
-        radius: 5
-      });
+      createBullet(player.x, player.y, player.angle, 'player');
       player.cooldown = .25;
     }
 
@@ -93,6 +125,25 @@
       context.restore();
     }
 
+    function drawEnemies() {
+      enemies.forEach(enemy => {
+        context.save();
+        context.translate(enemy.x, enemy.y);
+        context.rotate(enemy.angle);
+        context.fillStyle = '#d94f4f';
+        context.fillRect(-enemy.size, -enemy.size * .7, enemy.size * 2, enemy.size * 1.4);
+        context.fillStyle = '#ff7b54';
+        context.fillRect(-9, -7, 28, 14);
+        context.fillStyle = '#3b2020';
+        context.fillRect(0, -4, 25, 8);
+        context.restore();
+        context.fillStyle = '#f5f5f5';
+        context.font = '12px sans-serif';
+        context.textAlign = 'center';
+        context.fillText(`HP ${enemy.hp}`, enemy.x, enemy.y - enemy.size - 8);
+      });
+    }
+
     function drawBullets() {
       context.fillStyle = '#ffca28';
       bullets.forEach(bullet => {
@@ -106,6 +157,7 @@
       context.fillStyle = '#18212b';
       context.fillRect(0, 0, canvas.width, canvas.height);
       drawBullets();
+      drawEnemies();
       drawPlayer();
     }
 
@@ -133,6 +185,7 @@
     canvas.addEventListener('click', shoot);
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
+    for (let index = 0; index < 3; index++) spawnEnemy();
     requestAnimationFrame(gameLoop);
   </script>
 </body>
