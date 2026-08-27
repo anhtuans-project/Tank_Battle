@@ -28,6 +28,8 @@
     const GAME_STATE = Object.freeze({ PLAYING: 0, GAME_OVER: 1 });
     let gameState = GAME_STATE.PLAYING;
     const keys = {};
+    const mouse = { x: 0, y: 0 };
+    const bullets = [];
     const player = {
       x: 0,
       y: 0,
@@ -55,6 +57,27 @@
       player.y += Math.sin(player.angle) * forward * player.speed * deltaTime;
       player.x = Math.max(player.size, Math.min(player.x, canvas.width - player.size));
       player.y = Math.max(player.size, Math.min(player.y, canvas.height - player.size));
+      player.cooldown = Math.max(0, player.cooldown - deltaTime);
+      for (let index = bullets.length - 1; index >= 0; index--) {
+        const bullet = bullets[index];
+        bullet.x += bullet.vx * deltaTime;
+        bullet.y += bullet.vy * deltaTime;
+        if (bullet.x < -bullet.radius || bullet.x > canvas.width + bullet.radius || bullet.y < -bullet.radius || bullet.y > canvas.height + bullet.radius) bullets.splice(index, 1);
+      }
+    }
+
+    function shoot() {
+      if (gameState !== GAME_STATE.PLAYING || player.cooldown > 0) return;
+      const bulletSpeed = 520;
+      bullets.push({
+        x: player.x + Math.cos(player.angle) * 30,
+        y: player.y + Math.sin(player.angle) * 30,
+        vx: Math.cos(player.angle) * bulletSpeed,
+        vy: Math.sin(player.angle) * bulletSpeed,
+        owner: 'player',
+        radius: 5
+      });
+      player.cooldown = .25;
     }
 
     function drawPlayer() {
@@ -70,9 +93,19 @@
       context.restore();
     }
 
+    function drawBullets() {
+      context.fillStyle = '#ffca28';
+      bullets.forEach(bullet => {
+        context.beginPath();
+        context.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+        context.fill();
+      });
+    }
+
     function render() {
       context.fillStyle = '#18212b';
       context.fillRect(0, 0, canvas.width, canvas.height);
+      drawBullets();
       drawPlayer();
     }
 
@@ -91,6 +124,13 @@
     window.addEventListener('keyup', event => {
       keys[event.key.length === 1 ? event.key.toLowerCase() : event.key] = false;
     });
+    canvas.addEventListener('mousemove', event => {
+      const bounds = canvas.getBoundingClientRect();
+      mouse.x = event.clientX - bounds.left;
+      mouse.y = event.clientY - bounds.top;
+      player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+    });
+    canvas.addEventListener('click', shoot);
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
     requestAnimationFrame(gameLoop);
