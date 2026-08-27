@@ -31,6 +31,8 @@
     const mouse = { x: 0, y: 0 };
     const bullets = [];
     const enemies = [];
+    let score = 0;
+    let wave = 0;
     const map = [
       '111111111111',
       '100000000001',
@@ -120,7 +122,36 @@
         const column = 1 + Math.floor(Math.random() * (map[0].length - 2));
         point = map[row][column] === '0' ? mapPoint(column, row) : null;
       } while (!point || Math.hypot(point.x - player.x, point.y - player.y) < 180 || hitsWall(point.x, point.y, 24));
-      enemies.push({ x: point.x, y: point.y, angle: 0, speed: 65, hp: 2, cooldown: 1 + Math.random(), size: 24 });
+      enemies.push({
+        x: point.x,
+        y: point.y,
+        angle: 0,
+        speed: 65 + wave * 8,
+        hp: 1 + Math.ceil(wave / 2),
+        cooldown: .7 + Math.random() * .8,
+        size: 24
+      });
+    }
+
+    function startWave() {
+      wave++;
+      const count = 1 + wave * 2;
+      for (let index = 0; index < count; index++) spawnEnemy();
+    }
+
+    function restartGame() {
+      bullets.length = 0;
+      enemies.length = 0;
+      score = 0;
+      wave = 0;
+      gameState = GAME_STATE.PLAYING;
+      player.hp = 100;
+      player.cooldown = 0;
+      player.angle = -Math.PI / 2;
+      const point = mapPoint(1, 1);
+      player.x = point.x;
+      player.y = point.y;
+      startWave();
     }
 
     function update(deltaTime) {
@@ -163,7 +194,10 @@
           if (enemy) {
             enemy.hp--;
             bullets.splice(index, 1);
-            if (enemy.hp <= 0) enemies.splice(enemies.indexOf(enemy), 1);
+            if (enemy.hp <= 0) {
+              enemies.splice(enemies.indexOf(enemy), 1);
+              score += 10;
+            }
           }
         } else if (Math.hypot(bullet.x - player.x, bullet.y - player.y) < bullet.radius + player.size) {
           player.hp -= 10;
@@ -171,6 +205,7 @@
           if (player.hp <= 0) gameState = GAME_STATE.GAME_OVER;
         }
       }
+      if (!enemies.length) startWave();
     }
 
     function shoot() {
@@ -230,6 +265,27 @@
       }));
     }
 
+    function drawStatus() {
+      context.fillStyle = '#f5f5f5';
+      context.font = '16px sans-serif';
+      context.textAlign = 'left';
+      context.fillText(`SCORE ${score}`, 16, 28);
+      context.fillText(`HP ${Math.max(0, player.hp)}`, 16, 52);
+      context.fillText(`WAVE ${wave}`, 16, 76);
+    }
+
+    function drawGameOver() {
+      if (gameState !== GAME_STATE.GAME_OVER) return;
+      context.fillStyle = 'rgba(0, 0, 0, .7)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#ffffff';
+      context.textAlign = 'center';
+      context.font = 'bold 36px sans-serif';
+      context.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+      context.font = '18px sans-serif';
+      context.fillText('CLICK TO RESTART', canvas.width / 2, canvas.height / 2 + 24);
+    }
+
     function render() {
       context.fillStyle = '#18212b';
       context.fillRect(0, 0, canvas.width, canvas.height);
@@ -237,6 +293,8 @@
       drawBullets();
       drawEnemies();
       drawPlayer();
+      drawStatus();
+      drawGameOver();
     }
 
     function gameLoop(time) {
@@ -260,10 +318,10 @@
       mouse.y = event.clientY - bounds.top;
       player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
     });
-    canvas.addEventListener('click', shoot);
+    canvas.addEventListener('click', () => gameState === GAME_STATE.GAME_OVER ? restartGame() : shoot());
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
-    for (let index = 0; index < 3; index++) spawnEnemy();
+    startWave();
     requestAnimationFrame(gameLoop);
   </script>
 </body>
