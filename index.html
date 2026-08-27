@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tank Battle</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #18212b;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="Tank Battle game area"></canvas>
+  <script>
+    const canvas = document.getElementById('game');
+    const context = canvas.getContext('2d');
+    const GAME_STATE = Object.freeze({ PLAYING: 0, GAME_OVER: 1 });
+    let gameState = GAME_STATE.PLAYING;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    function update() {
+      if (gameState === GAME_STATE.GAME_OVER) return;
+    }
+
+    function render() {
+      context.fillStyle = '#18212b';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function gameLoop() {
+      update();
+      render();
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    gameLoop();
+  </script>
+</body>
+</html>
