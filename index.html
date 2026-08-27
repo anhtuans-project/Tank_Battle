@@ -28,11 +28,12 @@
     const GAME_STATE = Object.freeze({ PLAYING: 0, GAME_OVER: 1 });
     let gameState = GAME_STATE.PLAYING;
     const keys = {};
-    const mouse = { x: 0, y: 0 };
     const bullets = [];
     const enemies = [];
+    const effects = [];
     let score = 0;
     let wave = 0;
+    let damageFlash = 0;
     const map = [
       '111111111111',
       '100000000001',
@@ -81,20 +82,22 @@
       return { x: origin.x + (column + .5) * size, y: origin.y + (row + .5) * size };
     }
 
-    function wallBounds(wall) {
+    function wallBounds(column, row) {
       const size = tileSize();
       const origin = mapOrigin();
-      return { x: origin.x + wall.column * size, y: origin.y + wall.row * size, width: size, height: size };
+      return { x: origin.x + column * size, y: origin.y + row * size, width: size, height: size };
     }
 
     function hitsWall(x, y, radius) {
-      return map.some((row, rowIndex) => [...row].some((cell, column) => {
-        if (cell !== '1') return false;
-        const bounds = wallBounds({ column, row: rowIndex });
-        const closestX = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width));
-        const closestY = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height));
-        return Math.hypot(x - closestX, y - closestY) < radius;
-      }));
+      for (let row = 0; row < map.length; row++) for (let column = 0; column < map[row].length; column++) {
+        if (map[row][column] === '1') {
+          const bounds = wallBounds(column, row);
+          const closestX = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width));
+          const closestY = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height));
+          if (Math.hypot(x - closestX, y - closestY) < radius) return true;
+        }
+      }
+      return false;
     }
 
     function moveTank(tank, x, y) {
@@ -106,14 +109,24 @@
 
     function createBullet(x, y, angle, owner) {
       const bulletSpeed = 520;
+      const muzzleX = x + Math.cos(angle) * 30;
+      const muzzleY = y + Math.sin(angle) * 30;
       bullets.push({
-        x: x + Math.cos(angle) * 30,
-        y: y + Math.sin(angle) * 30,
+        x: muzzleX,
+        y: muzzleY,
         vx: Math.cos(angle) * bulletSpeed,
         vy: Math.sin(angle) * bulletSpeed,
         owner,
         radius: 5
       });
+      effects.push({ type: 'flash', x: muzzleX, y: muzzleY, life: .08 });
+    }
+
+    function createExplosion(x, y) {
+      for (let index = 0; index < 8; index++) {
+        const angle = index * Math.PI / 4;
+        effects.push({ type: 'spark', x, y, vx: Math.cos(angle) * 70, vy: Math.sin(angle) * 70, life: .35 });
+      }
     }
 
     function spawnEnemy() {
@@ -143,8 +156,10 @@
     function restartGame() {
       bullets.length = 0;
       enemies.length = 0;
+      effects.length = 0;
       score = 0;
       wave = 0;
+      damageFlash = 0;
       gameState = GAME_STATE.PLAYING;
       player.hp = 100;
       player.cooldown = 0;
@@ -156,6 +171,16 @@
     }
 
     function update(deltaTime) {
+      damageFlash = Math.max(0, damageFlash - deltaTime);
+      for (let index = effects.length - 1; index >= 0; index--) {
+        const effect = effects[index];
+        effect.life -= deltaTime;
+        if (effect.type === 'spark') {
+          effect.x += effect.vx * deltaTime;
+          effect.y += effect.vy * deltaTime;
+        }
+        if (effect.life <= 0) effects.splice(index, 1);
+      }
       if (gameState === GAME_STATE.GAME_OVER) return;
       const forward = (keys.w || keys.ArrowUp ? 1 : 0) - (keys.s || keys.ArrowDown ? 1 : 0);
       const turn = (keys.d || keys.ArrowRight ? 1 : 0) - (keys.a || keys.ArrowLeft ? 1 : 0);
@@ -197,11 +222,13 @@
             bullets.splice(index, 1);
             if (enemy.hp <= 0) {
               enemies.splice(enemies.indexOf(enemy), 1);
+              createExplosion(enemy.x, enemy.y);
               score += 10;
             }
           }
         } else if (Math.hypot(bullet.x - player.x, bullet.y - player.y) < bullet.radius + player.size) {
           player.hp -= 10;
+          damageFlash = .2;
           bullets.splice(index, 1);
           if (player.hp <= 0) gameState = GAME_STATE.GAME_OVER;
         }
@@ -256,14 +283,25 @@
       });
     }
 
+    function drawEffects() {
+      effects.forEach(effect => {
+        context.globalAlpha = Math.min(1, effect.life * 8);
+        context.fillStyle = effect.type === 'flash' ? '#fff59d' : '#ff7043';
+        context.beginPath();
+        context.arc(effect.x, effect.y, effect.type === 'flash' ? 10 : 5, 0, Math.PI * 2);
+        context.fill();
+      });
+      context.globalAlpha = 1;
+    }
+
     function drawWalls() {
       context.fillStyle = '#607d8b';
-      map.forEach((row, rowIndex) => [...row].forEach((cell, column) => {
-        if (cell === '1') {
-          const bounds = wallBounds({ column, row: rowIndex });
+      for (let row = 0; row < map.length; row++) for (let column = 0; column < map[row].length; column++) {
+        if (map[row][column] === '1') {
+          const bounds = wallBounds(column, row);
           context.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
         }
-      }));
+      }
     }
 
     function drawStatus() {
@@ -305,8 +343,13 @@
       drawBullets();
       drawEnemies();
       drawPlayer();
+      drawEffects();
       drawStatus();
       drawGameOver();
+      if (damageFlash) {
+        context.fillStyle = `rgba(239, 83, 80, ${damageFlash * 1.5})`;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+      }
     }
 
     function gameLoop(time) {
@@ -326,9 +369,7 @@
     });
     canvas.addEventListener('mousemove', event => {
       const bounds = canvas.getBoundingClientRect();
-      mouse.x = event.clientX - bounds.left;
-      mouse.y = event.clientY - bounds.top;
-      player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+      player.angle = Math.atan2(event.clientY - bounds.top - player.y, event.clientX - bounds.left - player.x);
     });
     canvas.addEventListener('click', event => {
       if (gameState === GAME_STATE.GAME_OVER) {
