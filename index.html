@@ -27,30 +27,73 @@
     const context = canvas.getContext('2d');
     const GAME_STATE = Object.freeze({ PLAYING: 0, GAME_OVER: 1 });
     let gameState = GAME_STATE.PLAYING;
+    const keys = {};
+    const player = {
+      x: 0,
+      y: 0,
+      angle: -Math.PI / 2,
+      speed: 180,
+      hp: 100,
+      cooldown: 0,
+      size: 28
+    };
+    let previousTime = 0;
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      player.x = Math.max(player.size, Math.min(player.x || canvas.width / 2, canvas.width - player.size));
+      player.y = Math.max(player.size, Math.min(player.y || canvas.height / 2, canvas.height - player.size));
     }
 
-    function update() {
+    function update(deltaTime) {
       if (gameState === GAME_STATE.GAME_OVER) return;
+      const forward = (keys.w || keys.ArrowUp ? 1 : 0) - (keys.s || keys.ArrowDown ? 1 : 0);
+      const turn = (keys.d || keys.ArrowRight ? 1 : 0) - (keys.a || keys.ArrowLeft ? 1 : 0);
+      player.angle += turn * 3 * deltaTime;
+      player.x += Math.cos(player.angle) * forward * player.speed * deltaTime;
+      player.y += Math.sin(player.angle) * forward * player.speed * deltaTime;
+      player.x = Math.max(player.size, Math.min(player.x, canvas.width - player.size));
+      player.y = Math.max(player.size, Math.min(player.y, canvas.height - player.size));
+    }
+
+    function drawPlayer() {
+      context.save();
+      context.translate(player.x, player.y);
+      context.rotate(player.angle);
+      context.fillStyle = '#4caf50';
+      context.fillRect(-player.size, -player.size * .7, player.size * 2, player.size * 1.4);
+      context.fillStyle = '#8bc34a';
+      context.fillRect(-10, -7, 30, 14);
+      context.fillStyle = '#263238';
+      context.fillRect(0, -4, 25, 8);
+      context.restore();
     }
 
     function render() {
       context.fillStyle = '#18212b';
       context.fillRect(0, 0, canvas.width, canvas.height);
+      drawPlayer();
     }
 
-    function gameLoop() {
-      update();
+    function gameLoop(time) {
+      const deltaTime = Math.min((time - previousTime) / 1000, .05);
+      previousTime = time;
+      update(deltaTime);
       render();
       requestAnimationFrame(gameLoop);
     }
 
+    window.addEventListener('keydown', event => {
+      keys[event.key.length === 1 ? event.key.toLowerCase() : event.key] = true;
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault();
+    });
+    window.addEventListener('keyup', event => {
+      keys[event.key.length === 1 ? event.key.toLowerCase() : event.key] = false;
+    });
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
-    gameLoop();
+    requestAnimationFrame(gameLoop);
   </script>
 </body>
 </html>
