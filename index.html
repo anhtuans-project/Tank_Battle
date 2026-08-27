@@ -31,6 +31,10 @@
     const mouse = { x: 0, y: 0 };
     const bullets = [];
     const enemies = [];
+    const walls = [
+      { x: 0.28, y: 0.2, width: 0.12, height: 0.34 },
+      { x: 0.6, y: 0.46, width: 0.12, height: 0.34 }
+    ];
     const player = {
       x: 0,
       y: 0,
@@ -47,6 +51,31 @@
       canvas.height = window.innerHeight;
       player.x = Math.max(player.size, Math.min(player.x || canvas.width / 2, canvas.width - player.size));
       player.y = Math.max(player.size, Math.min(player.y || canvas.height / 2, canvas.height - player.size));
+    }
+
+    function wallBounds(wall) {
+      return {
+        x: wall.x * canvas.width,
+        y: wall.y * canvas.height,
+        width: wall.width * canvas.width,
+        height: wall.height * canvas.height
+      };
+    }
+
+    function hitsWall(x, y, radius) {
+      return walls.some(wall => {
+        const bounds = wallBounds(wall);
+        const closestX = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width));
+        const closestY = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height));
+        return Math.hypot(x - closestX, y - closestY) < radius;
+      });
+    }
+
+    function moveTank(tank, x, y) {
+      if (!hitsWall(x, y, tank.size * .8)) {
+        tank.x = x;
+        tank.y = y;
+      }
     }
 
     function createBullet(x, y, angle, owner) {
@@ -76,8 +105,8 @@
       const forward = (keys.w || keys.ArrowUp ? 1 : 0) - (keys.s || keys.ArrowDown ? 1 : 0);
       const turn = (keys.d || keys.ArrowRight ? 1 : 0) - (keys.a || keys.ArrowLeft ? 1 : 0);
       player.angle += turn * 3 * deltaTime;
-      player.x += Math.cos(player.angle) * forward * player.speed * deltaTime;
-      player.y += Math.sin(player.angle) * forward * player.speed * deltaTime;
+      moveTank(player, player.x + Math.cos(player.angle) * forward * player.speed * deltaTime, player.y);
+      moveTank(player, player.x, player.y + Math.sin(player.angle) * forward * player.speed * deltaTime);
       player.x = Math.max(player.size, Math.min(player.x, canvas.width - player.size));
       player.y = Math.max(player.size, Math.min(player.y, canvas.height - player.size));
       player.cooldown = Math.max(0, player.cooldown - deltaTime);
@@ -87,8 +116,8 @@
         const distance = Math.hypot(dx, dy);
         enemy.angle = Math.atan2(dy, dx);
         if (distance > 150) {
-          enemy.x += Math.cos(enemy.angle) * enemy.speed * deltaTime;
-          enemy.y += Math.sin(enemy.angle) * enemy.speed * deltaTime;
+          moveTank(enemy, enemy.x + Math.cos(enemy.angle) * enemy.speed * deltaTime, enemy.y);
+          moveTank(enemy, enemy.x, enemy.y + Math.sin(enemy.angle) * enemy.speed * deltaTime);
         }
         enemy.x = Math.max(enemy.size, Math.min(enemy.x, canvas.width - enemy.size));
         enemy.y = Math.max(enemy.size, Math.min(enemy.y, canvas.height - enemy.size));
@@ -102,7 +131,22 @@
         const bullet = bullets[index];
         bullet.x += bullet.vx * deltaTime;
         bullet.y += bullet.vy * deltaTime;
-        if (bullet.x < -bullet.radius || bullet.x > canvas.width + bullet.radius || bullet.y < -bullet.radius || bullet.y > canvas.height + bullet.radius) bullets.splice(index, 1);
+        if (bullet.x < -bullet.radius || bullet.x > canvas.width + bullet.radius || bullet.y < -bullet.radius || bullet.y > canvas.height + bullet.radius || hitsWall(bullet.x, bullet.y, bullet.radius)) {
+          bullets.splice(index, 1);
+          continue;
+        }
+        if (bullet.owner === 'player') {
+          const enemy = enemies.find(enemy => Math.hypot(bullet.x - enemy.x, bullet.y - enemy.y) < bullet.radius + enemy.size);
+          if (enemy) {
+            enemy.hp--;
+            bullets.splice(index, 1);
+            if (enemy.hp <= 0) enemies.splice(enemies.indexOf(enemy), 1);
+          }
+        } else if (Math.hypot(bullet.x - player.x, bullet.y - player.y) < bullet.radius + player.size) {
+          player.hp -= 10;
+          bullets.splice(index, 1);
+          if (player.hp <= 0) gameState = GAME_STATE.GAME_OVER;
+        }
       }
     }
 
@@ -153,9 +197,18 @@
       });
     }
 
+    function drawWalls() {
+      context.fillStyle = '#607d8b';
+      walls.forEach(wall => {
+        const bounds = wallBounds(wall);
+        context.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+      });
+    }
+
     function render() {
       context.fillStyle = '#18212b';
       context.fillRect(0, 0, canvas.width, canvas.height);
+      drawWalls();
       drawBullets();
       drawEnemies();
       drawPlayer();
