@@ -31,9 +31,16 @@
     const mouse = { x: 0, y: 0 };
     const bullets = [];
     const enemies = [];
-    const walls = [
-      { x: 0.28, y: 0.2, width: 0.12, height: 0.34 },
-      { x: 0.6, y: 0.46, width: 0.12, height: 0.34 }
+    const map = [
+      '111111111111',
+      '100000000001',
+      '101110111101',
+      '100010000001',
+      '101010111101',
+      '100000100001',
+      '101111101101',
+      '100000000001',
+      '111111111111'
     ];
     const player = {
       x: 0,
@@ -49,26 +56,42 @@
     function resizeCanvas() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      player.x = Math.max(player.size, Math.min(player.x || canvas.width / 2, canvas.width - player.size));
-      player.y = Math.max(player.size, Math.min(player.y || canvas.height / 2, canvas.height - player.size));
+      const size = tileSize();
+      player.x = player.x || mapPoint(1, 1).x;
+      player.y = player.y || mapPoint(1, 1).y;
+      player.x = Math.max(size + player.size / 2, Math.min(player.x, canvas.width - size - player.size / 2));
+      player.y = Math.max(size + player.size / 2, Math.min(player.y, canvas.height - size - player.size / 2));
+    }
+
+    function tileSize() {
+      return Math.min(canvas.width / map[0].length, canvas.height / map.length);
+    }
+
+    function mapOrigin() {
+      const size = tileSize();
+      return { x: (canvas.width - size * map[0].length) / 2, y: (canvas.height - size * map.length) / 2 };
+    }
+
+    function mapPoint(column, row) {
+      const size = tileSize();
+      const origin = mapOrigin();
+      return { x: origin.x + (column + .5) * size, y: origin.y + (row + .5) * size };
     }
 
     function wallBounds(wall) {
-      return {
-        x: wall.x * canvas.width,
-        y: wall.y * canvas.height,
-        width: wall.width * canvas.width,
-        height: wall.height * canvas.height
-      };
+      const size = tileSize();
+      const origin = mapOrigin();
+      return { x: origin.x + wall.column * size, y: origin.y + wall.row * size, width: size, height: size };
     }
 
     function hitsWall(x, y, radius) {
-      return walls.some(wall => {
-        const bounds = wallBounds(wall);
+      return map.some((row, rowIndex) => [...row].some((cell, column) => {
+        if (cell !== '1') return false;
+        const bounds = wallBounds({ column, row: rowIndex });
         const closestX = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width));
         const closestY = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height));
         return Math.hypot(x - closestX, y - closestY) < radius;
-      });
+      }));
     }
 
     function moveTank(tank, x, y) {
@@ -91,13 +114,13 @@
     }
 
     function spawnEnemy() {
-      let x;
-      let y;
+      let point;
       do {
-        x = 40 + Math.random() * Math.max(1, canvas.width - 80);
-        y = 40 + Math.random() * Math.max(1, canvas.height - 80);
-      } while (Math.hypot(x - player.x, y - player.y) < 180);
-      enemies.push({ x, y, angle: 0, speed: 65, hp: 2, cooldown: 1 + Math.random(), size: 24 });
+        const row = 1 + Math.floor(Math.random() * (map.length - 2));
+        const column = 1 + Math.floor(Math.random() * (map[0].length - 2));
+        point = map[row][column] === '0' ? mapPoint(column, row) : null;
+      } while (!point || Math.hypot(point.x - player.x, point.y - player.y) < 180 || hitsWall(point.x, point.y, 24));
+      enemies.push({ x: point.x, y: point.y, angle: 0, speed: 65, hp: 2, cooldown: 1 + Math.random(), size: 24 });
     }
 
     function update(deltaTime) {
@@ -199,10 +222,12 @@
 
     function drawWalls() {
       context.fillStyle = '#607d8b';
-      walls.forEach(wall => {
-        const bounds = wallBounds(wall);
-        context.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-      });
+      map.forEach((row, rowIndex) => [...row].forEach((cell, column) => {
+        if (cell === '1') {
+          const bounds = wallBounds({ column, row: rowIndex });
+          context.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+        }
+      }));
     }
 
     function render() {
